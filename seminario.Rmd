@@ -72,6 +72,23 @@ snacks <- Snacks %>% as_tibble() %>% mutate(type = case_when(type == 1 ~ "A",
                                                              type == 5 ~ "E"))
 ```
 
+## Introdução: Váriaveis positivas
+	
+- Definindo váriaveis positivas: dados nulos ou positivos, quais retornarão variável resposta tambêm positiva.
+- Precisam ser positivos para estarem dentro do dominio e imagem das distribuições que serão supostas.
+- Váriaveis positivam emglobam númros interiros e continuos.
+	
+## Exemplos de distribuições e suas ultilizações
+
+- Poisson: dados de contagem, poucos zeros, números naturais;
+- Binomial: poucos zero, números naturais;
+- Binomial Negativa: muitos zeros, números inteiros;
+- Weibull: base de dados pequena, valores continuos, reais positivos;
+- Birnbaum-Saunders: dados assimétricos, poucos zeros, números reais;
+- Gama: dados assimétricos, poucos zeros, números reais;
+- Normal-Inversa: dados assimétricos, poucos zeros, números reais;
+		
+
 ## Dados 
 
 - Foi realizado um experimento de desenvolvimento de produto no Departamento de Nutrição da Faculdade de Saúde Públida da USP com 5 formas de um alimento. Em que a gordua vegetal hidrogenada foi subtitíuda por óleo de carnola.
