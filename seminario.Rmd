@@ -72,30 +72,26 @@ snacks <- Snacks %>% as_tibble() %>% mutate(type = case_when(type == 1 ~ "A",
                                                              type == 5 ~ "E"))
 ```
 
-## Introdução: Váriaveis positivas
+## Introdução: Variáveis positivas
 	
-- Definindo váriaveis positivas: dados nulos ou positivos, quais retornarão variável resposta tambêm positiva.
-- Precisam ser positivos para estarem dentro do dominio e imagem das distribuições que serão supostas.
-- Váriaveis positivam emglobam númros interiros e continuos.
+- Variáveis explicativas com dados nulos ou positivos, quais retornarão variável resposta tambêm positiva.
+- Precisam ser positivas para estarem dentro do suporte das distribuições que serão supostas.
+- Emglobam números interiros e contínuos.
 	
 ## Exemplos de distribuições e suas ultilizações
 
-- Poisson: dados de contagem, poucos zeros, números naturais;
-- Binomial: poucos zero, números naturais;
-- Binomial Negativa: muitos zeros, números inteiros;
+- Poisson: dados de contagem, poucos zeros, números inteiros positivos;
+- Binomial: poucos zero, números inteiros positivos;
+- Binomial Negativa: muitos zeros, números inteiros positivos;
 - Weibull: base de dados pequena, valores continuos, reais positivos;
-- Birnbaum-Saunders: dados assimétricos, poucos zeros, números reais;
-- Gama: dados assimétricos, poucos zeros, números reais;
-- Normal-Inversa: dados assimétricos, poucos zeros, números reais;
+- Birnbaum-Saunders: dados assimétricos, poucos zeros, números reais positivos;
+- Gama: dados assimétricos, poucos zeros, números reais positivos;
+- Normal-Inversa: dados assimétricos, poucos zeros, números reais positivos;
 		
-
 ## Dados 
 
 - Foi realizado um experimento de desenvolvimento de produto no Departamento de Nutrição da Faculdade de Saúde Públida da USP com 5 formas de um alimento. Em que a gordua vegetal hidrogenada foi subtitíuda por óleo de carnola.
-- Formas: A (22% de gordura, 0%
-de óleo de canola), B (0% de gordura, 22% de óleo de canola), C (17% de
-gordura, 5% de óleo de canola), D (11% de gordura, 11% de óleo de canola)
-e E (5% de gordura, 17% de óleo de canola).
+- Formas: A (22% de gordura, 0% de óleo de canola), B (0% de gordura, 22% de óleo de canola), C (17% de gordura, 5% de óleo de canola), D (11% de gordura, 11% de óleo de canola) e E (5% de gordura, 17% de óleo de canola).
 - O experimento foi realizado ao longo de 20 semanas, em cada semana par 15 embalagens de cada tipo de produto era análisado em laboratório.
 - Aqui vamos estudar o comportamento da textura através da força necessária para o cisalhamento.
 
