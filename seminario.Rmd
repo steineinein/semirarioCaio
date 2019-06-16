@@ -74,7 +74,7 @@ snacks <- Snacks %>% as_tibble() %>% mutate(type = case_when(type == 1 ~ "A",
 
 ## Introdução: Variáveis positivas
 	
-- Variáveis explicativas com dados nulos ou positivos, quais retornarão variável resposta tambêm positiva.
+- Variáveis explicativas com dados nulos ou positivos, quais retornarão variável resposta também positiva.
 - Precisam ser positivas para estarem dentro do suporte das distribuições que serão supostas.
 - Emglobam números interiros e contínuos.
 	
