@@ -1,6 +1,6 @@
 ---
 title: "Modelos de regressão para variáveis positivas"
-author: "Gabriel Stein 197466, Gabriela Vechini"
+author: "Gabriel Stein 197466, Gabriela Vechini 172625"
 output:
   beamer_presentation:
     theme: "default"
@@ -61,6 +61,7 @@ library(gridExtra)
 library(knitr)
 library(kableExtra)
 library(formattable)
+library(statmod)
 ```
 
 ```{r}
@@ -211,6 +212,8 @@ em que $x_j$ é a $j$-ésima semana, $\alpha_i$ são os efeitos das formas, $\be
 # summary(snacks.fit.gamma)
 ```
 
+## Gamma
+
 ```{r}
 snacks.fit.gamma.cos <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
   glm(texture ~ type + week.cos, family = Gamma(link = "identity"), .)
@@ -220,32 +223,6 @@ summary(snacks.fit.gamma.cos)
 ```{r}
 # cbind(snacks,fitted(snacks.fit.gamma.cos)) %>% gather(origem, valor, -type, -week) %>%
 #     ggplot(aes(x = week, y = valor, color = origem)) + geom_point() + facet_wrap(~ type)
-```
-
-```{r}
-# predicao
-ilink <- family(snacks.fit.gamma.cos)$linkin
-pd <- snacks %>% group_by(type, week) %>% summarise(n = n()) %>% mutate(week.cos = cos((-pi*week + 14*pi)/10))
-pd <- cbind(pd, predict(snacks.fit.gamma.cos, pd, type = "link", se.fit=T)[1])
-estimativa <- snacks.fit.gamma.cos$coefficients
-pd <- mutate(pd, mi = case_when(type == "A" ~ estimativa[1] + estimativa[6]*week.cos,
-                                type == "B" ~ estimativa[2] + estimativa[6]*week.cos,
-                                type == "C" ~ estimativa[3] + estimativa[6]*week.cos,
-                                type == "D" ~ estimativa[4] + estimativa[6]*week.cos,
-                                type == "E" ~ estimativa[5] + estimativa[6]*week.cos),
-             dispersao = summary(snacks.fit.gamma.cos)$dispersion,
-             alpha = 1/dispersao,
-             beta = alpha/mi)
-pd <- mutate(pd, Fitted = ilink(fit),
-             Upper = qgamma(0.975, shape = alpha, rate = beta),
-             Lower = qgamma(0.025, shape = alpha, rate = beta))
-
-ggplot() +
-    geom_ribbon(data = pd, aes(ymin = Lower, ymax = Upper, x = week),
-                fill = "steelblue2", alpha = 0.5) +
-    geom_line(data = pd, aes(y = Fitted, x = week)) + facet_wrap(~ type) +
-    geom_point(data = snacks, aes(x = week, y = texture))
-
 ```
 
 ```{r}
@@ -278,7 +255,7 @@ grafico.deviance.gama <- tibble(fit = fitted(snacks.fit.gamma.cos), td = td) %>%
 snacks.fit.ninv.cos1 <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
   glm(texture ~ type * week.cos, family = inverse.gaussian(link = "identity"), .)
 snacks.fit.ninv.cos2 <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
-  glm(texture ~ type + week.cos, family = inverse.gaussian(link = "identity"), .)
+  glm(texture ~ -1 + type + week.cos, family = inverse.gaussian(link = "identity"), .)
 ```
 
 ```{r}
@@ -336,23 +313,23 @@ grafico.deviance.ninv2 <- tibble(fit = fitted(snacks.fit.ninv.cos2), td = td) %>
 grid.arrange(grafico.residuo.gama, grafico.residuo.ninv2, ncol = 2)
 ```
 
-## Resíduo Componente do Desvio
+<!-- ## Resíduo Componente do Desvio -->
 
-```{r}
-grid.arrange(grafico.deviance.gama, grafico.deviance.ninv2, ncol = 2)
-```
+<!-- ```{r} -->
+<!-- grid.arrange(grafico.deviance.gama, grafico.deviance.ninv2, ncol = 2) -->
+<!-- ``` -->
 
-## Resíduo de Pearson com e sem interação
+<!-- ## Resíduo de Pearson com e sem interação -->
 
-```{r}
-grid.arrange(grafico.residuo.ninv1, grafico.residuo.ninv2, ncol = 2)
-```
+<!-- ```{r} -->
+<!-- grid.arrange(grafico.residuo.ninv1, grafico.residuo.ninv2, ncol = 2) -->
+<!-- ``` -->
 
-## Resíduo Componente do Desvio com e sem interação
+<!-- ## Resíduo Componente do Desvio com e sem interação -->
 
-```{r}
-grid.arrange(grafico.deviance.ninv1, grafico.deviance.ninv2, ncol = 2)
-```
+<!-- ```{r} -->
+<!-- grid.arrange(grafico.deviance.ninv1, grafico.deviance.ninv2, ncol = 2) -->
+<!-- ``` -->
 
 <!-- ## Snacks Modelo Gama -->
 
@@ -368,6 +345,31 @@ grid.arrange(grafico.deviance.ninv1, grafico.deviance.ninv2, ncol = 2)
 <!-- source("enve_gamma.R") -->
 <!-- ``` -->
 
+## Predição
+
+```{r}
+# predicao
+ilink <- family(snacks.fit.ninv.cos2)$linkin
+pd <- snacks %>% group_by(type, week) %>% summarise(n = n()) %>% mutate(week.cos = cos((-pi*week + 14*pi)/10))
+pd <- cbind(pd, predict(snacks.fit.ninv.cos2, pd, type = "link", se.fit=T)[1])
+estimativa <- snacks.fit.ninv.cos2$coefficients
+pd <- mutate(pd, mi = case_when(type == "A" ~ estimativa[1] + estimativa[6]*week.cos,
+                                type == "B" ~ estimativa[2] + estimativa[6]*week.cos,
+                                type == "C" ~ estimativa[3] + estimativa[6]*week.cos,
+                                type == "D" ~ estimativa[4] + estimativa[6]*week.cos,
+                                type == "E" ~ estimativa[5] + estimativa[6]*week.cos),
+             dispersao = summary(snacks.fit.ninv.cos2)$dispersion)
+pd <- mutate(pd, Fitted = ilink(fit),
+             Upper = qinvgauss(0.975, mean = mi, dispersion = dispersao),
+             Lower = qinvgauss(0.025, mean = mi, dispersion = dispersao))
+
+ggplot() +
+    geom_ribbon(data = pd, aes(ymin = Lower, ymax = Upper, x = week),
+                fill = "steelblue2", alpha = 0.5) +
+    geom_line(data = pd, aes(y = Fitted, x = week)) + facet_wrap(~ type) +
+    geom_point(data = snacks, aes(x = week, y = texture))
+
+```
 
 ## Snacks Modelo Normal Inversa
 
@@ -382,3 +384,5 @@ source("daig_ninv.R")
 fit.model <- snacks.fit.ninv.cos2
 source("envel_ninv.R")
 ```
+
+## Bibliografia
