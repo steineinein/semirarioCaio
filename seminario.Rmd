@@ -1,6 +1,6 @@
 ---
 title: "Modelos de regressão para variáveis positivas"
-author: "Gabriel Stein 197466, Gabriela Vechini 172625"
+author: "Gabriel Stein 197466, Gabriela Vechini"
 output:
   beamer_presentation:
     theme: "default"
@@ -87,11 +87,14 @@ snacks <- Snacks %>% as_tibble() %>% mutate(type = case_when(type == 1 ~ "A",
 - Birnbaum-Saunders: dados assimétricos, poucos zeros, números reais positivos;
 - Gama: dados assimétricos, poucos zeros, números reais positivos;
 - Normal-Inversa: dados assimétricos, poucos zeros, números reais positivos;
-		
+
 ## Dados 
 
 - Foi realizado um experimento de desenvolvimento de produto no Departamento de Nutrição da Faculdade de Saúde Públida da USP com 5 formas de um alimento. Em que a gordua vegetal hidrogenada foi subtitíuda por óleo de carnola.
-- Formas: A (22% de gordura, 0% de óleo de canola), B (0% de gordura, 22% de óleo de canola), C (17% de gordura, 5% de óleo de canola), D (11% de gordura, 11% de óleo de canola) e E (5% de gordura, 17% de óleo de canola).
+- Formas: A (22% de gordura, 0%
+de óleo de canola), B (0% de gordura, 22% de óleo de canola), C (17% de
+gordura, 5% de óleo de canola), D (11% de gordura, 11% de óleo de canola)
+e E (5% de gordura, 17% de óleo de canola).
 - O experimento foi realizado ao longo de 20 semanas, em cada semana par 15 embalagens de cada tipo de produto era análisado em laboratório.
 - Aqui vamos estudar o comportamento da textura através da força necessária para o cisalhamento.
 
@@ -177,12 +180,11 @@ Modelo:
 
 
 
-
-$$ Y_{ij} = \alpha_i +  \alpha_i\beta\cos(f(x_{ij}))$$
+$$ Y_{ijk} = \alpha_i +  \alpha_i\beta\cos(f(x_{j}))$$
 
 ```{r}
 snacks.fit.normal <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
-  lm(texture ~ type * week.cos, .)
+  lm(texture ~ -1 + type * week.cos, .)
 # summary(snacks.fit.normal)
 ```
 
@@ -192,7 +194,16 @@ snacks.fit.normal <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>
 diagnorm(snacks.fit.normal)
 ```
 
-## Gama
+## Alternativa
+
+A força de cisalhamento é uma variável positiva e tem uma distribuição assimétrica à direitra, o que indica que ela pode ser modelada por um distribuição normal inversa ou gama.
+Aparentemente a resposta dado a semana tem uma resposta periódica.
+
+Seja $Y_{ijk}$ a força de cisalhamento da $k$-ésima réplica do $i$-ésimo grupo na $j$-ésima semana, onde $k = 1,...,15$, $k = 2,4,6,...,20$ e $i = 1(A),2(B),3(C),4(D),5(E)$. Suponha $Y_{ijk} \sim G(\mu_{ij}\phi)$ e $Y_{ijk} \sim NI(\mu_{ij}\phi)$ e sua parte sistemática
+
+$$ \mu_{ij} = \alpha_i + \beta\cos(ax_j+b)$$
+
+em que $x_j$ é a $j$-ésima semana, $\alpha_i$ são os efeitos das formas, $\beta$ o efeito da semana e $a$ e $b$ foram escolhidos empiricamente.
 
 ```{r}
 # snacks.fit.gamma.lin <- snacks %>%
@@ -211,9 +222,8 @@ summary(snacks.fit.gamma.cos)
 #     ggplot(aes(x = week, y = valor, color = origem)) + geom_point() + facet_wrap(~ type)
 ```
 
-## Predição
-
 ```{r}
+# predicao
 ilink <- family(snacks.fit.gamma.cos)$linkin
 pd <- snacks %>% group_by(type, week) %>% summarise(n = n()) %>% mutate(week.cos = cos((-pi*week + 14*pi)/10))
 pd <- cbind(pd, predict(snacks.fit.gamma.cos, pd, type = "link", se.fit=T)[1])
@@ -238,10 +248,8 @@ ggplot() +
 
 ```
 
-
-## Residuo de Pearson Gama
-
 ```{r}
+# residuos gama
 X <- model.matrix(snacks.fit.gamma.cos)
 n <- nrow(X)
 p <- ncol(X)
@@ -271,7 +279,6 @@ snacks.fit.ninv.cos1 <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10))
   glm(texture ~ type * week.cos, family = inverse.gaussian(link = "identity"), .)
 snacks.fit.ninv.cos2 <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
   glm(texture ~ type + week.cos, family = inverse.gaussian(link = "identity"), .)
-summary(snacks.fit.ninv.cos1)
 ```
 
 ```{r}
@@ -291,12 +298,12 @@ cbind(snacks,fitted(snacks.fit.ninv.cos2)) %>% gather(origem, valor, -type, -wee
 X <- model.matrix(snacks.fit.ninv.cos1)
 n <- nrow(X)
 p <- ncol(X)
-w <- snacks.fit.ninv.cos$weights
+w <- snacks.fit.ninv.cos1$weights
 W <- diag(w)
 H <- solve(t(X)%*%W%*%X)
 H <- sqrt(W)%*%X%*%H%*%t(X)%*%sqrt(W)
 h <- diag(H)
-soma <- resid(snacks.fit.ninv.cos, type="pearson")
+soma <- resid(snacks.fit.ninv.cos1, type="pearson")
 soma <- sum(soma^2)
 fi <- (n-p)/soma
 ts <- resid(snacks.fit.ninv.cos1,type="pearson")*sqrt(fi/(1-h))
@@ -309,7 +316,7 @@ grafico.deviance.ninv1 <- tibble(fit = fitted(snacks.fit.ninv.cos1), td = td) %>
 X <- model.matrix(snacks.fit.ninv.cos2)
 n <- nrow(X)
 p <- ncol(X)
-w <- snacks.fit.ninv.cos$weights
+w <- snacks.fit.ninv.cos2$weights
 W <- diag(w)
 H <- solve(t(X)%*%W%*%X)
 H <- sqrt(W)%*%X%*%H%*%t(X)%*%sqrt(W)
@@ -326,7 +333,7 @@ grafico.deviance.ninv2 <- tibble(fit = fitted(snacks.fit.ninv.cos2), td = td) %>
 ## Residuo de Pearson Modelo Gama vs Modelo Normal Inversa
 
 ```{r}
-grid.arrange(grafico.residuo.gama, grafico.residuo.ninv, ncol = 2)
+grid.arrange(grafico.residuo.gama, grafico.residuo.ninv2, ncol = 2)
 ```
 
 ## Resíduo Componente do Desvio
@@ -335,63 +342,43 @@ grid.arrange(grafico.residuo.gama, grafico.residuo.ninv, ncol = 2)
 grid.arrange(grafico.deviance.gama, grafico.deviance.ninv2, ncol = 2)
 ```
 
+## Resíduo de Pearson com e sem interação
+
 ```{r}
 grid.arrange(grafico.residuo.ninv1, grafico.residuo.ninv2, ncol = 2)
 ```
+
+## Resíduo Componente do Desvio com e sem interação
 
 ```{r}
 grid.arrange(grafico.deviance.ninv1, grafico.deviance.ninv2, ncol = 2)
 ```
 
+<!-- ## Snacks Modelo Gama -->
 
+<!-- ```{r} -->
+<!-- fit.model <- snacks.fit.gamma.cos -->
+<!-- source("diag_gama.r") -->
+<!-- ``` -->
 
-## Snacks Modelo Gama
+<!-- ## Snacks Modelo Gama  -->
 
-```{r}
-fit.model <- snacks.fit.gamma.cos
-source("diag_gama.r")
-```
-
-## Snacks Modelo Gama 
-
-```{r, fig.height=7}
-fit.model <- snacks.fit.gamma.cos
-source("enve_gamma.R")
-```
+<!-- ```{r, fig.height=7} -->
+<!-- fit.model <- snacks.fit.gamma.cos -->
+<!-- source("enve_gamma.R") -->
+<!-- ``` -->
 
 
 ## Snacks Modelo Normal Inversa
 
 ```{r}
-fit.model <- snacks.fit.ninv.cos
+fit.model <- snacks.fit.ninv.cos2
 source("daig_ninv.R")
 ```
 
 ## Snacks Modelo Normal Inversa
 
 ```{r, fig.height=7}
-fit.model <- snacks.fit.ninv.cos
+fit.model <- snacks.fit.ninv.cos2
 source("envel_ninv.R")
 ```
-  
-
-
-## R Markdown
-
-This is an R Markdown presentation. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
-
-## Slide with Bullets
-
-- Bullet 1
-- Bullet 2
-- Bullet 3
-
-## Slide with R Output
-
-
-
-## Slide with Plot
-
-
