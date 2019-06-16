@@ -1,8 +1,32 @@
 ---
-title: "Variaveis Positivas"
-author: "Gabriel Stein 1977466"
-date: "June 8, 2019"
-output: beamer_presentation
+title: "Modelos de regressão para variáveis positivas"
+author: "Gabriel Stein 1977466, Gabriela Vechini"
+output:
+  beamer_presentation:
+    theme: "default"
+    colortheme: "seahorse"
+    fig_crop: no
+header-includes:
+  - \usepackage[utf8]{inputenc}
+  - \usepackage[brazil, english, portuguese]{babel}
+  - \usepackage[utf8]{inputenc}
+  - \usepackage[T1]{fontenc}
+  - \usepackage[fixlanguage]{babelbib}
+  - \usepackage{times}
+
+  - \usepackage{graphicx}
+  - \usepackage{wrapfig}
+  - \usepackage{pdfpages}
+  
+  - \usepackage{amsfonts}
+  - \usepackage{amssymb}
+  - \usepackage{amsmath}
+  
+  - \usepackage{fancyhdr}
+  - \usepackage{subcaption}
+  - \usepackage{booktabs}
+  - \usepackage{caption}
+  - \usepackage{float}
 ---
 
 ```{r setup, include=FALSE}
@@ -20,6 +44,199 @@ options(
   )
 ```
 
+```{r}
+library(HoRM)
+library(tidyverse)
+library(survival)
+library(insuranceData)
+library(magrittr)
+library(readxl)
+library(corrplot)
+library(haven)
+library(fitdistrplus)
+library(ssym)
+source("diag_norm.R")
+source("envel_norm.R")
+library(gridExtra)
+```
+
+```{r}
+data(Snacks)
+snacks <- Snacks %>% as_tibble() %>% mutate(type = case_when(type == 1 ~ "A",
+                                                             type == 2 ~ "B",
+                                                             type == 3 ~ "C",
+                                                             type == 4 ~ "D",
+                                                             type == 5 ~ "E"))
+```
+
+## Análise exploratória
+
+```{r}
+snacks %>% ggplot(aes(y = texture, x = week)) + geom_point() + facet_wrap(~ type)
+```
+
+## Análise exploratória
+
+```{r}
+snacks %>% ggplot(aes(y = texture, x = factor(week))) + geom_boxplot()
+```
+
+## Análise exploratória
+
+```{r}
+snacks %>% ggplot(aes(y = texture, x = type)) + geom_boxplot()
+```
+
+
+## Modelo normal
+
+```{r}
+snacks.fit.normal <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
+  lm(texture ~ type + week.cos, .)
+summary(snacks.fit.normal)
+```
+
+## Diágnóstico
+
+```{r}
+diagnorm(snacks.fit.normal)
+```
+
+## Gama
+
+```{r}
+# snacks.fit.gamma.lin <- snacks %>%
+#   glm(texture ~ type + week, family = Gamma(link = "identity"), .)
+# summary(snacks.fit.gamma)
+```
+
+```{r}
+snacks.fit.gamma.cos <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
+  glm(texture ~ -1 + type + week.cos, family = Gamma(link = "identity"), .)
+summary(snacks.fit.gamma.cos)
+```
+
+```{r}
+# cbind(snacks,fitted(snacks.fit.gamma.cos)) %>% gather(origem, valor, -type, -week) %>%
+#     ggplot(aes(x = week, y = valor, color = origem)) + geom_point() + facet_wrap(~ type)
+```
+
+## Predição
+
+```{r}
+ilink <- family(snacks.fit.gamma.cos)$linkin
+pd <- snacks %>% group_by(type, week) %>% summarise(n = n()) %>% mutate(week.cos = cos((-pi*week + 14*pi)/10))
+pd <- cbind(pd, predict(snacks.fit.gamma.cos, pd, type = "link", se.fit=T)[1])
+estimativa <- snacks.fit.gamma.cos$coefficients
+pd <- mutate(pd, mi = case_when(type == "A" ~ estimativa[1] + estimativa[6]*week.cos,
+                                type == "B" ~ estimativa[2] + estimativa[6]*week.cos,
+                                type == "C" ~ estimativa[3] + estimativa[6]*week.cos,
+                                type == "D" ~ estimativa[4] + estimativa[6]*week.cos,
+                                type == "E" ~ estimativa[5] + estimativa[6]*week.cos),
+             dispersao = summary(snacks.fit.gamma.cos)$dispersion,
+             alpha = 1/dispersao,
+             beta = alpha/mi)
+pd <- mutate(pd, Fitted = ilink(fit),
+             Upper = qgamma(0.975, shape = alpha, rate = beta),
+             Lower = qgamma(0.025, shape = alpha, rate = beta))
+
+ggplot() +
+    geom_ribbon(data = pd, aes(ymin = Lower, ymax = Upper, x = week),
+                fill = "steelblue2", alpha = 0.5) +
+    geom_line(data = pd, aes(y = Fitted, x = week)) + facet_wrap(~ type) +
+    geom_point(data = snacks, aes(x = week, y = texture))
+
+```
+
+
+## Residuo de Pearson Gama
+
+```{r}
+X <- model.matrix(snacks.fit.gamma.cos)
+n <- nrow(X)
+p <- ncol(X)
+w <- snacks.fit.gamma.cos$weights
+W <- diag(w)
+H <- solve(t(X)%*%W%*%X)
+H <- sqrt(W)%*%X%*%H%*%t(X)%*%sqrt(W)
+h <- diag(H)
+fi <- gamma.shape(snacks.fit.gamma.cos)$alpha
+ts <- resid(snacks.fit.gamma.cos,type="pearson")*sqrt(fi/(1-h))
+grafico.residuo.gama <- tibble(fit = fitted(snacks.fit.gamma.cos), ts = ts) %>% ggplot(aes(x = fit, y = ts)) + geom_point()
+```
+
+## Normal Inversa
+
+```{r}
+# snacks.fit.ninv <- snacks %>%
+#   glm(texture ~ -1 + type + week, family = inverse.gaussian(), .)
+# summary(snacks.fit.ninv)
+```
+
+
+```{r}
+snacks.fit.ninv.cos <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
+  glm(texture ~ -1 + type + week.cos, family = inverse.gaussian(), .)
+summary(snacks.fit.ninv.cos)
+```
+
+## Residuo pearson inversa
+
+```{r}
+X <- model.matrix(snacks.fit.ninv.cos)
+n <- nrow(X)
+p <- ncol(X)
+w <- snacks.fit.ninv.cos$weights
+W <- diag(w)
+H <- solve(t(X)%*%W%*%X)
+H <- sqrt(W)%*%X%*%H%*%t(X)%*%sqrt(W)
+h <- diag(H)
+soma <- resid(snacks.fit.ninv.cos, type="pearson")
+soma <- sum(soma^2)
+fi <- (n-p)/soma
+ts <- resid(snacks.fit.ninv.cos,type="pearson")*sqrt(fi/(1-h))
+td <- resid(snacks.fit.ninv.cos,type="deviance")*sqrt(fi/(1-h))
+grafico.residuo.ninv <- tibble(fit = fitted(snacks.fit.ninv.cos), ts = ts) %>% ggplot(aes(x = fit, y = ts)) + geom_point()
+```
+
+## Residuos Modelo Gama vs Modelo Normal Inversa
+
+```{r}
+grid.arrange(grafico.residuo.gama, grafico.residuo.ninv, ncol = 2)
+```
+
+
+## Snacks Modelo Gama
+
+```{r}
+fit.model <- snacks.fit.gamma.cos
+source("diag_gama.r")
+```
+
+## Snacks Modelo Gama 
+
+```{r, fig.height=7}
+fit.model <- snacks.fit.gamma.cos
+source("enve_gamma.R")
+```
+
+
+## Snacks Modelo Normal Inversa
+
+```{r}
+fit.model <- snacks.fit.ninv.cos
+source("daig_ninv.R")
+```
+
+## Snacks Modelo Normal Inversa
+
+```{r, fig.height=7}
+fit.model <- snacks.fit.ninv.cos
+source("envel_ninv.R")
+```
+  
+
+
 ## R Markdown
 
 This is an R Markdown presentation. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
@@ -34,13 +251,8 @@ When you click the **Knit** button a document will be generated that includes bo
 
 ## Slide with R Output
 
-```{r cars, echo = TRUE}
-summary(cars)
-```
+
 
 ## Slide with Plot
 
-```{r pressure}
-plot(pressure)
-```
 
