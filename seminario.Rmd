@@ -1,6 +1,6 @@
 ---
 title: "Modelos de regressão para variáveis positivas"
-author: "Gabriel Stein 1977466, Gabriela Vechini"
+author: "Gabriel Stein 197466, Gabriela Vechini 172625"
 output:
   beamer_presentation:
     theme: "default"
