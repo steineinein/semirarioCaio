@@ -58,6 +58,9 @@ library(ssym)
 source("diag_norm.R")
 source("envel_norm.R")
 library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(formattable)
 ```
 
 ```{r}
@@ -69,34 +72,108 @@ snacks <- Snacks %>% as_tibble() %>% mutate(type = case_when(type == 1 ~ "A",
                                                              type == 5 ~ "E"))
 ```
 
-## Análise exploratória
+## Dados 
+
+- Foi realizado um experimento de desenvolvimento de produto no Departamento de Nutrição da Faculdade de Saúde Públida da USP com 5 formas de um alimento. Em que a gordua vegetal hidrogenada foi subtitíuda por óleo de carnola.
+- Formas: A (22% de gordura, 0%
+de óleo de canola), B (0% de gordura, 22% de óleo de canola), C (17% de
+gordura, 5% de óleo de canola), D (11% de gordura, 11% de óleo de canola)
+e E (5% de gordura, 17% de óleo de canola).
+- O experimento foi realizado ao longo de 20 semanas, em cada semana par 15 embalagens de cada tipo de produto era análisado em laboratório.
+- Aqui vamos estudar o comportamento da textura através da força necessária para o cisalhamento.
+
+## Banco de dados
 
 ```{r}
-snacks %>% ggplot(aes(y = texture, x = week)) + geom_point() + facet_wrap(~ type)
+snacks %>% head(8) %>% set_colnames(c("Cisalhamento","Forma","Semana")) %>%
+  kable("latex", booktabs = T, caption = "Primeiras 8 linhas do banco de dados") %>% kable_styling(font_size = 9)
 ```
 
-## Análise exploratória
+## Análise exploratória por forma
 
 ```{r}
-snacks %>% ggplot(aes(y = texture, x = factor(week))) + geom_boxplot()
+snacks %>% ggplot(aes(y = texture, x = type)) + geom_boxplot() +
+  labs(x = "Forma", y = "Cisalhamento")
 ```
 
-## Análise exploratória
+## Análise exploratória por forma
 
 ```{r}
-snacks %>% ggplot(aes(y = texture, x = type)) + geom_boxplot()
+sumario.forma <- snacks %>% group_by(type) %>% summarise(media = mean(texture), dp = sd(texture), cv = dp/media) %>%
+  mutate(cv = percent(as.numeric(cv))) %>%
+  set_colnames(c("Grupo", "Média", "DP", "CV")) %>% t() 
+colnames(sumario.forma) <- sumario.forma[1,]
+sumario.forma <- sumario.forma[-1,]
+kable(sumario.forma,"latex", booktabs = T) %>% kable_styling(font_size = 9)
 ```
 
+## Análise exploratória por semana
+
+```{r}
+snacks %>% ggplot(aes(y = texture, x = factor(week))) + geom_boxplot() +
+  labs(x = "Semana", y = "Cisalhamento")
+```
+
+## Análise exploratória por semana
+
+```{r}
+sumario.semana <- snacks %>% group_by(week) %>% summarise(media = mean(texture), dp = sd(texture), cv = dp/media) %>%
+  mutate(cv = percent(as.numeric(cv))) %>%
+  set_colnames(c("Grupo", "Média", "DP", "CV")) %>% t() 
+colnames(sumario.semana) <- as.integer(sumario.semana[1,])
+sumario.semana <- sumario.semana[-1,]
+kable(sumario.semana[,1:5],"latex", booktabs = T) %>% kable_styling(font_size = 8)
+kable(sumario.semana[,6:10],"latex", booktabs = T) %>% kable_styling(font_size = 8)
+```
+
+<!-- \begin{table}[H] -->
+<!-- \centering\begingroup\fontsize{8}{11}\selectfont -->
+
+<!-- \begin{tabular}{lrrrrr} -->
+<!-- \hline -->
+<!--   & 2 & 4 & 6 & 8 & 10\\ -->
+<!-- \hline -->
+<!-- Média & 50,9513333 & 44,6588000 & 50,0828000 & 55,5653333 & 60,1502667\\ -->
+<!-- DP & 13,1233342 & 9,7580618 & 15,9687690 & 16,2805286 & 14,7190660\\ -->
+<!-- CV & 0,2575661 & 0,2185026 & 0,3188474 & 0,2929979 & 0,2447049\\ -->
+<!-- \hline -->
+<!--   & 12 & 14 & 16 & 18 & 20\\ -->
+<!-- \hline -->
+<!-- Média & 57,8350667 & 71,571733 & 65,1784000 & 60,3740000 & 52,4552000\\ -->
+<!-- DP & 13,6111127 & 20,168339 & 16,9516530 & 10,2482286 & 12,5844843\\ -->
+<!-- CV & 0,2353436 & 0,281792 & 0,2600808 & 0,1697457 & 0,2399092\\ -->
+<!-- \end{tabular} -->
+<!-- \endgroup{} -->
+<!-- \end{table} -->
+
+## Análise exploratória por semana e por forma
+
+```{r}
+snacks %>% ggplot(aes(y = texture, x = week)) + geom_point() + facet_wrap(~ type) 
+```
 
 ## Modelo normal
 
+Suposições:
+
+- Normalidade
+- Homocedasticidade
+- Independencia
+
+Modelo:
+
+
+
+
+$$ Y_{ij} = \alpha_i +  \alpha_i\beta\cos(f(x_{ij}))$$
+
 ```{r}
 snacks.fit.normal <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
-  lm(texture ~ type + week.cos, .)
-summary(snacks.fit.normal)
+  lm(texture ~ type * week.cos, .)
+# summary(snacks.fit.normal)
 ```
 
-## Diágnóstico
+## Diágnóstico Para Modelo Normal
 
 ```{r}
 diagnorm(snacks.fit.normal)
@@ -112,7 +189,7 @@ diagnorm(snacks.fit.normal)
 
 ```{r}
 snacks.fit.gamma.cos <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
-  glm(texture ~ -1 + type + week.cos, family = Gamma(link = "identity"), .)
+  glm(texture ~ type + week.cos, family = Gamma(link = "identity"), .)
 summary(snacks.fit.gamma.cos)
 ```
 
@@ -162,7 +239,9 @@ H <- sqrt(W)%*%X%*%H%*%t(X)%*%sqrt(W)
 h <- diag(H)
 fi <- gamma.shape(snacks.fit.gamma.cos)$alpha
 ts <- resid(snacks.fit.gamma.cos,type="pearson")*sqrt(fi/(1-h))
+td <- resid(snacks.fit.gamma.cos,type="deviance")*sqrt(fi/(1-h))
 grafico.residuo.gama <- tibble(fit = fitted(snacks.fit.gamma.cos), ts = ts) %>% ggplot(aes(x = fit, y = ts)) + geom_point()
+grafico.deviance.gama <- tibble(fit = fitted(snacks.fit.gamma.cos), td = td) %>% ggplot(aes(x = fit, y = td)) + geom_point()
 ```
 
 ## Normal Inversa
@@ -175,15 +254,28 @@ grafico.residuo.gama <- tibble(fit = fitted(snacks.fit.gamma.cos), ts = ts) %>% 
 
 
 ```{r}
-snacks.fit.ninv.cos <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
-  glm(texture ~ -1 + type + week.cos, family = inverse.gaussian(), .)
-summary(snacks.fit.ninv.cos)
+snacks.fit.ninv.cos1 <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
+  glm(texture ~ type * week.cos, family = inverse.gaussian(link = "identity"), .)
+snacks.fit.ninv.cos2 <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
+  glm(texture ~ type + week.cos, family = inverse.gaussian(link = "identity"), .)
+summary(snacks.fit.ninv.cos1)
 ```
+
+```{r}
+cbind(snacks,fitted(snacks.fit.ninv.cos1)) %>% gather(origem, valor, -type, -week) %>%
+    ggplot(aes(x = week, y = valor, color = origem)) + geom_point() + facet_wrap(~ type)
+```
+
+```{r}
+cbind(snacks,fitted(snacks.fit.ninv.cos2)) %>% gather(origem, valor, -type, -week) %>%
+    ggplot(aes(x = week, y = valor, color = origem)) + geom_point() + facet_wrap(~ type)
+```
+
 
 ## Residuo pearson inversa
 
 ```{r}
-X <- model.matrix(snacks.fit.ninv.cos)
+X <- model.matrix(snacks.fit.ninv.cos1)
 n <- nrow(X)
 p <- ncol(X)
 w <- snacks.fit.ninv.cos$weights
@@ -194,16 +286,50 @@ h <- diag(H)
 soma <- resid(snacks.fit.ninv.cos, type="pearson")
 soma <- sum(soma^2)
 fi <- (n-p)/soma
-ts <- resid(snacks.fit.ninv.cos,type="pearson")*sqrt(fi/(1-h))
-td <- resid(snacks.fit.ninv.cos,type="deviance")*sqrt(fi/(1-h))
-grafico.residuo.ninv <- tibble(fit = fitted(snacks.fit.ninv.cos), ts = ts) %>% ggplot(aes(x = fit, y = ts)) + geom_point()
+ts <- resid(snacks.fit.ninv.cos1,type="pearson")*sqrt(fi/(1-h))
+td <- resid(snacks.fit.ninv.cos1,type="deviance")*sqrt(fi/(1-h))
+grafico.residuo.ninv1 <- tibble(fit = fitted(snacks.fit.ninv.cos1), ts = ts) %>% ggplot(aes(x = fit, y = ts)) + geom_point()
+grafico.deviance.ninv1 <- tibble(fit = fitted(snacks.fit.ninv.cos1), td = td) %>% ggplot(aes(x = fit, y = td)) + geom_point()
 ```
 
-## Residuos Modelo Gama vs Modelo Normal Inversa
+```{r}
+X <- model.matrix(snacks.fit.ninv.cos2)
+n <- nrow(X)
+p <- ncol(X)
+w <- snacks.fit.ninv.cos$weights
+W <- diag(w)
+H <- solve(t(X)%*%W%*%X)
+H <- sqrt(W)%*%X%*%H%*%t(X)%*%sqrt(W)
+h <- diag(H)
+soma <- resid(snacks.fit.ninv.cos2, type="pearson")
+soma <- sum(soma^2)
+fi <- (n-p)/soma
+ts <- resid(snacks.fit.ninv.cos2,type="pearson")*sqrt(fi/(1-h))
+td <- resid(snacks.fit.ninv.cos2,type="deviance")*sqrt(fi/(1-h))
+grafico.residuo.ninv2 <- tibble(fit = fitted(snacks.fit.ninv.cos2), ts = ts) %>% ggplot(aes(x = fit, y = ts)) + geom_point()
+grafico.deviance.ninv2 <- tibble(fit = fitted(snacks.fit.ninv.cos2), td = td) %>% ggplot(aes(x = fit, y = td)) + geom_point()
+```
+
+## Residuo de Pearson Modelo Gama vs Modelo Normal Inversa
 
 ```{r}
 grid.arrange(grafico.residuo.gama, grafico.residuo.ninv, ncol = 2)
 ```
+
+## Resíduo Componente do Desvio
+
+```{r}
+grid.arrange(grafico.deviance.gama, grafico.deviance.ninv2, ncol = 2)
+```
+
+```{r}
+grid.arrange(grafico.residuo.ninv1, grafico.residuo.ninv2, ncol = 2)
+```
+
+```{r}
+grid.arrange(grafico.deviance.ninv1, grafico.deviance.ninv2, ncol = 2)
+```
+
 
 
 ## Snacks Modelo Gama
