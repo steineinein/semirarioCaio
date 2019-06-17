@@ -193,6 +193,10 @@ snacks.fit.normal <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>
 
 ```{r}
 diagnorm(snacks.fit.normal)
+naolista <- data.frame(summary(snacks.fit.normal)[4])
+round(naolista, 4)
+coefdisp<- data.frame(summary(snacks.fit.normal)[8])
+paste("R2: ", round(coefdisp,3))
 ```
 
 ## Alternativa
@@ -383,6 +387,10 @@ source("daig_ninv.R")
 ```{r, fig.height=7}
 fit.model <- snacks.fit.ninv.cos2
 source("envel_ninv.R")
+naolista <- data.frame(summary(snacks.fit.ninv.cos2)[12])
+round(naolista, 4)
+coefdisp<- data.frame(summary(snacks.fit.ninv.cos2)[14])
+paste("Coeficiente de dispersão: ", round(coefdisp,4))
 ```
 
 ## Bibliografia
