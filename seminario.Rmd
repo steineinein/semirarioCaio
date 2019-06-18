@@ -35,7 +35,8 @@ knitr::opts_chunk$set(
   message = FALSE,
   warning = FALSE,
   tidy.opts = list(width.cutoff = 60),
-  tidy = TRUE
+  tidy = TRUE,
+  digits=3
   )
 options(
   OutDec = ",", 
@@ -45,6 +46,7 @@ options(
 ```
 
 ```{r}
+library(MASS)
 library(HoRM)
 library(tidyverse)
 library(survival)
@@ -55,13 +57,16 @@ library(corrplot)
 library(haven)
 library(fitdistrplus)
 library(ssym)
-source("diag_norm.R")
-source("envel_norm.R")
 library(gridExtra)
 library(knitr)
 library(kableExtra)
 library(formattable)
 library(statmod)
+library(ggfortify)
+library(qqplotr)
+library(vctrs)
+source("diag_norm.R")
+source("envel_norm.R")
 ```
 
 ```{r}
@@ -75,7 +80,7 @@ snacks <- Snacks %>% as_tibble() %>% mutate(type = case_when(type == 1 ~ "A",
 
 ## Introdução: Variáveis positivas
 	
-- Variáveis explicativas com dados nulos ou positivos, quais retornarão variável resposta também positiva.
+- Variáveis respostas positivas.
 - Precisam ser positivas para estarem dentro do suporte das distribuições que serão supostas.
 - Emglobam números interiros e contínuos.
 	
@@ -166,7 +171,8 @@ kable(sumario.semana[,6:10],"latex", booktabs = T) %>% kable_styling(font_size =
 ## Análise exploratória por semana e por forma
 
 ```{r}
-snacks %>% ggplot(aes(y = texture, x = week)) + geom_point() + facet_wrap(~ type) 
+snacks %>% ggplot(aes(y = texture, x = week)) + geom_point() + facet_wrap(~ type) +
+  labs(x = "Semana", y = "Cisalhamento")
 ```
 
 ## Modelo normal
@@ -179,24 +185,20 @@ Suposições:
 
 Modelo:
 
+$$ Y_{ijk} = \alpha_i +  \alpha_i\beta\cos(f(x_{j})) + \varepsilon_{ijk}$$
 
+Onefe $Y_{ijk}$ a força de cisalhamento da $k$-ésima réplica do $i$-ésimo grupo na $j$-ésima semana, onde $k = 1,...,15$, $k = 2,4,6,...,20$ e $i = 1(A),2(B),3(C),4(D),5(E)$, $x_j$ é a $j$-ésima semana, $\alpha_i$ são os efeitos das formas, $\alpha_i\beta$ o efeito da semana interagindo com com o tipo e $\varepsilon_{ijk} \sim N(0,\sigma^2)$ o erro.
 
-$$ Y_{ijk} = \alpha_i +  \alpha_i\beta\cos(f(x_{j}))$$
 
 ```{r}
 snacks.fit.normal <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
   lm(texture ~ -1 + type * week.cos, .)
-# summary(snacks.fit.normal)
 ```
 
 ## Diágnóstico Para Modelo Normal
 
 ```{r}
 diagnorm(snacks.fit.normal)
-naolista <- data.frame(summary(snacks.fit.normal)[4])
-round(naolista, 4)
-coefdisp<- data.frame(summary(snacks.fit.normal)[8])
-paste("R2: ", round(coefdisp,3))
 ```
 
 ## Alternativa
@@ -218,16 +220,55 @@ em que $x_j$ é a $j$-ésima semana, $\alpha_i$ são os efeitos das formas, $\be
 
 ## Gamma
 
-```{r}
-snacks.fit.gamma.cos <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
-  glm(texture ~ type + week.cos, family = Gamma(link = "identity"), .)
-summary(snacks.fit.gamma.cos)
-```
+Função de probabilidade
+
+$$f(y_{ijk},\mu_{ij},\phi) = exp[\phi\{-y/u_{ij} - log\mu_{ij}\}-log\Gamma(\phi)+\phi log(\phi y) - logy]$$
+
+Suposições:
+
+- $Y_{ijk} \sim Gama(\mu_{ij}\phi)$
+- Indepência das observações
+- Parâmetro de precisão $\phi$ constante
+
+## Estimação dos parâmetros do modelo Gama
 
 ```{r}
-# cbind(snacks,fitted(snacks.fit.gamma.cos)) %>% gather(origem, valor, -type, -week) %>%
-#     ggplot(aes(x = week, y = valor, color = origem)) + geom_point() + facet_wrap(~ type)
+snacks.fit.gamma.cos <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
+  glm(texture ~ -1 + type + week.cos, family = Gamma(link = "identity"), .)
+param.gamma <- snacks.fit.gamma.cos %>% broom::tidy() %>%
+  mutate(lower = estimate - std.error*1.96, upper = estimate + std.error*1.96) %>%
+  mutate_if(is.numeric, funs(round(.,3))) %>%
+  mutate(IC = paste("[",lower,";",upper,"]"),
+                    p.value = if_else(p.value < 0.001, "< 0.001", as.character(p.value))) %>%
+  dplyr::select(1:3,IC,statistic, p.value) %>%
+  set_colnames(c("Termo", "Estimatica", "Erro Padrão", "IC (95%)", "Estatística t", "p-valor")) %>%
+  kable("latex", booktabs = T) %>% kable_styling(font_size = 8)
+dispersao.gamma <- round(summary(snacks.fit.gamma.cos)$dispersion, 4)
+aic.gamma <- round(snacks.fit.gamma.cos$aic)
 ```
+
+\begin{table}[H]
+\centering\begingroup\fontsize{8}{10}\selectfont
+
+\begin{tabular}{lrrlrl}
+\toprule
+Termo & Estimatica & Erro Padrão & IC (95\%) & Estatística t & p-valor\\
+\midrule
+$\alpha_1$ & 66,358 & 1,205 & [ 63,996 ; 68,721 ] & 55,056 & < 0.001\\
+$\alpha_2$ & 55,373 & 1,002 & [ 53,409 ; 57,336 ] & 55,266 & < 0.001\\
+$\alpha_3$ & 61,313 & 1,112 & [ 59,133 ; 63,492 ] & 55,147 & < 0.001\\
+$\alpha_4$ & 51,004 & 0,921 & [ 49,199 ; 52,81 ] & 55,359 & < 0.001\\
+$\alpha_5$ & 50,354 & 0,909 & [ 48,572 ; 52,137 ] & 55,373 & < 0.001\\
+\addlinespace
+$\beta$ & 9,699 & 0,648 & [ 8,428 ; 10,97 ] & 14,958 & < 0.001\\
+\bottomrule
+\end{tabular}
+\endgroup{}
+\end{table}
+
+Para o qual as estimação do parâmetro de precisão é $\phi = `r 1/dispersao.gamma`$ e tem um AIC = `r aic.gamma`.
+
+## Diagnóstico do Modelo Gama
 
 ```{r}
 # residuos gama
@@ -242,56 +283,80 @@ h <- diag(H)
 fi <- gamma.shape(snacks.fit.gamma.cos)$alpha
 ts <- resid(snacks.fit.gamma.cos,type="pearson")*sqrt(fi/(1-h))
 td <- resid(snacks.fit.gamma.cos,type="deviance")*sqrt(fi/(1-h))
+di <- (h/(1-h))*(ts^2)
+a <- max(td)
+b <- min(td)
+
 grafico.residuo.gama <- tibble(fit = fitted(snacks.fit.gamma.cos), ts = ts) %>% ggplot(aes(x = fit, y = ts)) + geom_point()
-grafico.deviance.gama <- tibble(fit = fitted(snacks.fit.gamma.cos), td = td) %>% ggplot(aes(x = fit, y = td)) + geom_point()
+grafico.deviance.gama <- tibble(fit = fitted(snacks.fit.gamma.cos), td = td) %>% ggplot(aes(x = fit, y = td)) + geom_point() + labs(y ="Resíduo Componente do Desvio", x = "Valores Ajustados")
+grafico.residuo.index.gama <- tibble(index = 1:length(ts), ts = ts) %>% ggplot(aes(x = index, y = ts)) + geom_point()
+grafico.deviance.index.gama <- tibble(index = 1:length(td), td = td) %>% ggplot(aes(x = index, y = td)) + geom_point() + labs(y ="Resíduo Componente do Desvio", x = "Índice")
+grafico.deviance.density.gama <- tibble(fit = fitted(snacks.fit.gamma.cos), td = td) %>% ggplot(aes(x = td)) + geom_density() + labs(x ="Resíduo Componente do Desvio", y= "Densidade")
+qqplot.deviance.gama <- td %>% enframe() %>%
+  ggplot(aes(sample = value)) +
+  stat_qq_band(bandType = "ts", fill = "#8DA0CB", alpha = 0.4) +
+  stat_qq_line(colour = "#8DA0CB") +
+  stat_qq_point() + labs(y ="Resíduo Componente do Desvio", x = "Percentil da N(0,1)")
+grid.arrange(grafico.deviance.index.gama,grafico.deviance.gama, grafico.deviance.density.gama, qqplot.deviance.gama,
+             ncol = 2, nrow = 2)
 ```
 
 ## Normal Inversa
 
-```{r}
-# snacks.fit.ninv <- snacks %>%
-#   glm(texture ~ -1 + type + week, family = inverse.gaussian(), .)
-# summary(snacks.fit.ninv)
-```
+Função de probabilidade
 
+$$ f(y_{ijk},\mu_{ij},\phi) = exp\Bigg[\frac{-y_{ijk}/(2\phi\mu_{ij}) + 1/\mu}{\phi} - \frac{1}{2y_{ijk}\phi}-\frac{1}{2}log(2\pi\phi y^3_{ijk}) \Bigg] $$
+
+Suposições:
+
+- $Y_{ijk} \sim NI(\mu_{ij}\phi)$
+- Indepência das observações
+- Parâmetro de precisão $\phi$ constante
+
+## Estimação dos parâmetros do modelo Normal Inversa 
 
 ```{r}
 snacks.fit.ninv.cos1 <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
-  glm(texture ~ type * week.cos, family = inverse.gaussian(link = "identity"), .)
+  glm(texture ~ -1 + type * week.cos, family = inverse.gaussian(link = "identity"), .)
 snacks.fit.ninv.cos2 <- snacks %>% mutate(week.cos = cos((-pi*week + 14*pi)/10)) %>%
   glm(texture ~ -1 + type + week.cos, family = inverse.gaussian(link = "identity"), .)
 ```
 
 ```{r}
-cbind(snacks,fitted(snacks.fit.ninv.cos1)) %>% gather(origem, valor, -type, -week) %>%
-    ggplot(aes(x = week, y = valor, color = origem)) + geom_point() + facet_wrap(~ type)
+param.ninv2 <- snacks.fit.ninv.cos2 %>% broom::tidy() %>%
+  mutate(lower = estimate - std.error*1.96, upper = estimate + std.error*1.96) %>%
+  mutate_if(is.numeric, funs(round(.,3))) %>%
+  mutate(IC = paste("[",lower,";",upper,"]"),
+                    p.value = if_else(p.value < 0.001, "< 0.001", as.character(p.value))) %>%
+  dplyr::select(1:3,IC,statistic, p.value) %>%
+  set_colnames(c("Termo", "Estimatica", "Erro Padrão", "IC (95%)", "Estatística t", "p-valor")) %>%
+  kable("latex", booktabs = T) %>% kable_styling(font_size = 8)
+dispersao.ninv2 <- round(summary(snacks.fit.ninv.cos2)$dispersion, 7)
+aic.ninv2 <- round(snacks.fit.ninv.cos2$aic)
 ```
 
-```{r}
-cbind(snacks,fitted(snacks.fit.ninv.cos2)) %>% gather(origem, valor, -type, -week) %>%
-    ggplot(aes(x = week, y = valor, color = origem)) + geom_point() + facet_wrap(~ type)
-```
+\begin{table}[H]
+\centering\begingroup\fontsize{8}{10}\selectfont
 
+\begin{tabular}{lrrlrl}
+\toprule
+Termo & Estimatica & Erro Padrão & IC (95\%) & Estatística t & p-valor\\
+\midrule
+$\alpha_1$ & 66,450 & 1,275 & [ 63,952 ; 68,948 ] & 52,134 & < 0.001\\
+$\alpha_2$ & 55,406 & 0,965 & [ 53,514 ; 57,298 ] & 57,408 & < 0.001\\
+$\alpha_3$ & 61,117 & 1,121 & [ 58,919 ; 63,314 ] & 54,516 & < 0.001\\
+$\alpha_4$ & 51,012 & 0,852 & [ 49,342 ; 52,682 ] & 59,882 & < 0.001\\
+$\alpha_5$ & 50,397 & 0,837 & [ 48,758 ; 52,037 ] & 60,245 & < 0.001\\
+\addlinespace
+$\beta$ & 9,699 & 0,634 & [ 8,456 ; 10,942 ] & 15,293 & < 0.001\\
+\bottomrule
+\end{tabular}
+\endgroup{}
+\end{table}
 
-## Residuo pearson inversa
+Para o qual a estimação do parâmetro de precisão é $\phi = `r 1/dispersao.ninv2`$ e tem um AIC = `r aic.ninv2`.
 
-```{r}
-X <- model.matrix(snacks.fit.ninv.cos1)
-n <- nrow(X)
-p <- ncol(X)
-w <- snacks.fit.ninv.cos1$weights
-W <- diag(w)
-H <- solve(t(X)%*%W%*%X)
-H <- sqrt(W)%*%X%*%H%*%t(X)%*%sqrt(W)
-h <- diag(H)
-soma <- resid(snacks.fit.ninv.cos1, type="pearson")
-soma <- sum(soma^2)
-fi <- (n-p)/soma
-ts <- resid(snacks.fit.ninv.cos1,type="pearson")*sqrt(fi/(1-h))
-td <- resid(snacks.fit.ninv.cos1,type="deviance")*sqrt(fi/(1-h))
-grafico.residuo.ninv1 <- tibble(fit = fitted(snacks.fit.ninv.cos1), ts = ts) %>% ggplot(aes(x = fit, y = ts)) + geom_point()
-grafico.deviance.ninv1 <- tibble(fit = fitted(snacks.fit.ninv.cos1), td = td) %>% ggplot(aes(x = fit, y = td)) + geom_point()
-```
+## Diagnóstico do Modelo Normal Inversa
 
 ```{r}
 X <- model.matrix(snacks.fit.ninv.cos2)
@@ -308,54 +373,88 @@ fi <- (n-p)/soma
 ts <- resid(snacks.fit.ninv.cos2,type="pearson")*sqrt(fi/(1-h))
 td <- resid(snacks.fit.ninv.cos2,type="deviance")*sqrt(fi/(1-h))
 grafico.residuo.ninv2 <- tibble(fit = fitted(snacks.fit.ninv.cos2), ts = ts) %>% ggplot(aes(x = fit, y = ts)) + geom_point()
-grafico.deviance.ninv2 <- tibble(fit = fitted(snacks.fit.ninv.cos2), td = td) %>% ggplot(aes(x = fit, y = td)) + geom_point()
+grafico.deviance.ninv2 <- tibble(fit = fitted(snacks.fit.ninv.cos2), td = td) %>% ggplot(aes(x = fit, y = td)) + geom_point() + labs(y ="Resíduo Componente do Desvio", x = "Valores Ajustados")
+grafico.residuo.index.ninv2 <- tibble(index = 1:length(ts), ts = ts) %>% ggplot(aes(x = index, y = ts)) + geom_point()
+grafico.deviance.index.ninv2 <- tibble(index = 1:length(td), td = td) %>% ggplot(aes(x = index, y = td)) + geom_point() + labs(y ="Resíduo Componente do Desvio", x = "Índice")
+grafico.deviance.density.ninv2 <- tibble(fit = fitted(snacks.fit.ninv.cos2), td = td) %>% ggplot(aes(x = td)) + geom_density() + labs(x ="Resíduo Componente do Desvio", y= "Densidade")
+qqplot.deviance.ninv2 <- td %>% enframe() %>%
+  ggplot(aes(sample = value)) +
+  stat_qq_band(bandType = "ts", fill = "#8DA0CB", alpha = 0.4) +
+  stat_qq_line(colour = "#8DA0CB") +
+  stat_qq_point() + labs(y ="Resíduo Componente do Desvio", x = "Percentil da N(0,1)")
+grafico.hat.ninv2 <- tibble(h = h, fit = fitted(snacks.fit.ninv.cos2)) %>%
+  ggplot(aes(x = fit, y = h)) + geom_point() + geom_hline(yintercept = sum(h)*2/750) +
+  labs(y = "Medida H", x = "Valores ajustados")
+grafico.cook.ninv2 <- tibble(c = di, fit = fitted(snacks.fit.ninv.cos2)) %>%
+  ggplot(aes(x = fit, y = di)) + geom_point() +
+  labs(y = "Distância de Cook", x = "Valores ajustados")
+grid.arrange(grafico.deviance.index.ninv2,grafico.deviance.ninv2, grafico.deviance.density.ninv2, qqplot.deviance.ninv2,
+             ncol = 2, nrow = 2)
 ```
 
-## Residuo de Pearson Modelo Gama vs Modelo Normal Inversa
+## Comparação dos Resíduo Componente do Desvio para Gama e Normal Inversa
 
 ```{r}
-grid.arrange(grafico.residuo.gama, grafico.residuo.ninv2, ncol = 2)
+grid.arrange(grafico.deviance.gama + labs(y ="Resíduo Componente do Desvio", x = "Valores Ajustados (Gama)"),
+             grafico.deviance.ninv2 + labs(y ="Resíduo Componente do Desvio", x = "Valores Ajustados (NI)"),
+             ncol = 2)
 ```
 
-<!-- ## Resíduo Componente do Desvio -->
+## Normal inversa com interação
 
-<!-- ```{r} -->
-<!-- grid.arrange(grafico.deviance.gama, grafico.deviance.ninv2, ncol = 2) -->
-<!-- ``` -->
+$$ \mu_{ij} = \alpha_i + (\alpha\beta + \gamma_i)\cos(ax_j+b)$$
 
-<!-- ## Resíduo de Pearson com e sem interação -->
+```{r}
+estimativa.ninv.comint <- snacks.fit.ninv.cos1 %>% broom::tidy() %>%
+  mutate(lower = estimate - std.error*1.96, upper = estimate + std.error*1.96) %>%
+  mutate_if(is.numeric, funs(round(.,3))) %>%
+  mutate(IC = paste("[",lower,";",upper,"]"),
+                    p.value = if_else(p.value < 0.001, "< 0.001", as.character(p.value))) %>%
+  dplyr::select(1:3,IC,statistic, p.value) %>%
+  set_colnames(c("Termo", "Estimatica", "Erro Padrão", "IC (95%)", "Estatística t", "p-valor")) %>%
+  kable("latex", booktabs = T) %>% kable_styling(font_size = 8)
+dispersao.ninv1 <- round(summary(snacks.fit.ninv.cos2)$dispersion, 7)
+aic.ninv1 <- round(snacks.fit.ninv.cos2$aic)
+```
 
-<!-- ```{r} -->
-<!-- grid.arrange(grafico.residuo.ninv1, grafico.residuo.ninv2, ncol = 2) -->
-<!-- ``` -->
+\begin{table}[H]
+\centering\begingroup\fontsize{8}{10}\selectfont
 
-<!-- ## Resíduo Componente do Desvio com e sem interação -->
+\begin{tabular}{lrrlrl}
+\toprule
+Termo & Estimatica & Erro Padrão & IC (95\%) & Estatística t & p-valor\\
+\midrule
+$\alpha_1$ & 66,175 & 1,313 & [ 63,601 ; 68,749 ] & 50,384 & < 0.001\\
+$\alpha_2$ & 55,302 & 1,012 & [ 53,318 ; 57,285 ] & 54,655 & < 0.001\\
+$\alpha_3$ & 61,786 & 1,206 & [ 59,422 ; 64,149 ] & 51,237 & < 0.001\\
+$\alpha_4$ & 50,988 & 0,900 & [ 49,224 ; 52,753 ] & 56,636 & < 0.001\\
+$\alpha_5$ & 50,263 & 0,880 & [ 48,538 ; 51,988 ] & 57,117 & < 0.001\\
+\addlinespace
+$\alpha\beta$ & 8,449 & 1,835 & [ 4,852 ; 12,047 ] & 4,604 & < 0.001\\
+$\gamma_2$ & 0,843 & 2,310 & [ -3,683 ; 5,37 ] & 0,365 & 0,715\\
+$\gamma_3$ & 4,182 & 2,472 & [ -0,662 ; 9,026 ] & 1,692 & 0,091\\
+$\gamma_4$ & 1,166 & 2,216 & [ -3,176 ; 5,509 ] & 0,526 & 0,599\\
+$\gamma_5$ & 0,774 & 2,201 & [ -3,54 ; 5,088 ] & 0,352 & 0,725\\
+\bottomrule
+\end{tabular}
+\endgroup{}
+\end{table}
 
-<!-- ```{r} -->
-<!-- grid.arrange(grafico.deviance.ninv1, grafico.deviance.ninv2, ncol = 2) -->
-<!-- ``` -->
+Para o qual a estimação do parâmetro de precisão é $\phi = `r 1/dispersao.ninv1`$ e tem um AIC = `r aic.ninv1`.
 
-<!-- ## Snacks Modelo Gama -->
+## Influência e Alavanca
 
-<!-- ```{r} -->
-<!-- fit.model <- snacks.fit.gamma.cos -->
-<!-- source("diag_gama.r") -->
-<!-- ``` -->
+```{r}
+grid.arrange(grafico.hat.ninv2, grafico.cook.ninv2, ncol=2)
+```
 
-<!-- ## Snacks Modelo Gama  -->
-
-<!-- ```{r, fig.height=7} -->
-<!-- fit.model <- snacks.fit.gamma.cos -->
-<!-- source("enve_gamma.R") -->
-<!-- ``` -->
-
-## Predição
+## Intervalo de confiança
 
 ```{r}
 # predicao
 ilink <- family(snacks.fit.ninv.cos2)$linkin
 pd <- snacks %>% group_by(type, week) %>% summarise(n = n()) %>% mutate(week.cos = cos((-pi*week + 14*pi)/10))
-pd <- cbind(pd, predict(snacks.fit.ninv.cos2, pd, type = "link", se.fit=T)[1])
+pd <- cbind(pd, predict(snacks.fit.ninv.cos2, pd, type = "link", se.fit=T)[1:2])
 estimativa <- snacks.fit.ninv.cos2$coefficients
 pd <- mutate(pd, mi = case_when(type == "A" ~ estimativa[1] + estimativa[6]*week.cos,
                                 type == "B" ~ estimativa[2] + estimativa[6]*week.cos,
@@ -365,32 +464,36 @@ pd <- mutate(pd, mi = case_when(type == "A" ~ estimativa[1] + estimativa[6]*week
              dispersao = summary(snacks.fit.ninv.cos2)$dispersion)
 pd <- mutate(pd, Fitted = ilink(fit),
              Upper = qinvgauss(0.975, mean = mi, dispersion = dispersao),
-             Lower = qinvgauss(0.025, mean = mi, dispersion = dispersao))
+             Lower = qinvgauss(0.025, mean = mi, dispersion = dispersao),
+             upper = ilink(fit + 1.96*se.fit),
+             lower = ilink(fit - 1.96*se.fit))
+pd <- cbind(pd, media = snacks %>% group_by(type,week) %>% summarise(media = mean(texture)) %>% pull(media))
 
 ggplot() +
-    geom_ribbon(data = pd, aes(ymin = Lower, ymax = Upper, x = week),
-                fill = "steelblue2", alpha = 0.5) +
-    geom_line(data = pd, aes(y = Fitted, x = week)) + facet_wrap(~ type) +
-    geom_point(data = snacks, aes(x = week, y = texture))
+  geom_ribbon(data = pd, aes(ymin = lower, ymax = upper, x = week),
+              fill = "red", alpha = 0.4) +
+  geom_line(data = pd, aes(y = Fitted, x = week)) + facet_wrap(~ type) +
+  geom_point(data = pd, aes(x = week, y = media)) +
+  labs(x = "Semana", y = "Média")
 
 ```
 
-## Snacks Modelo Normal Inversa
+## Intervalo de Predição
 
 ```{r}
-fit.model <- snacks.fit.ninv.cos2
-source("daig_ninv.R")
+ggplot() +
+  geom_ribbon(data = pd, aes(ymin = Lower, ymax = Upper, x = week),
+              fill = "steelblue2", alpha = 0.5) +
+  geom_line(data = pd, aes(y = Fitted, x = week)) + facet_wrap(~ type) +
+  geom_point(data = snacks, aes(x = week, y = texture)) +
+  labs(x = "Semana", y = "Cisalhamento")
 ```
 
-## Snacks Modelo Normal Inversa
 
-```{r, fig.height=7}
-fit.model <- snacks.fit.ninv.cos2
-source("envel_ninv.R")
-naolista <- data.frame(summary(snacks.fit.ninv.cos2)[12])
-round(naolista, 4)
-coefdisp<- data.frame(summary(snacks.fit.ninv.cos2)[14])
-paste("Coeficiente de dispersão: ", round(coefdisp,4))
-```
+## Sugestões de melhoria
+
+- Outra distribuição talvez ajuste-se melhor aos dados, como um weibull ou log normal.
+- Modelar também o parâmetro de precisão $\phi$, com um MLG duplo.
+- Utilizar outros modelos como o GAM ou GAMLSS.
 
 ## Bibliografia
