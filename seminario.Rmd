@@ -478,9 +478,8 @@ ggplot() +
 
 ```
 
-## Intervalo de Predição
 
-```{r}
+```{r, eval = FALSE}
 ggplot() +
   geom_ribbon(data = pd, aes(ymin = Lower, ymax = Upper, x = week),
               fill = "steelblue2", alpha = 0.5) +
@@ -497,3 +496,16 @@ ggplot() +
 - Utilizar outros modelos como o GAM ou GAMLSS.
 
 ## Bibliografia
+
+Azevedo, C. L. N. *Notas de Aula ME613*. Dispónivel em:https://www.ime.unicamp.br/~cnaber/Material_ME613_1S_2019.htm
+
+Azevedo, C. L. N. *Notas de Aula ME720*. Dispónivel em:https://www.ime.unicamp.br/~cnaber/Material_MLG_1S_2016.htm
+
+Paula, GA (2013) **Modelos de regressão com apoio computacional**. Dispónivel em:https://www.ime.usp.br/~giapaula/texto_2013.pdf
+
+McCullagh, P. e Nelder, J. A. 1989. **Generalized Linear Models**. Chapman and Hall
+
+Jong, P. e Heller, G. Z. **Generalized Linear Models for Insurancer Data**. Cambridge University Press
+
+Vanegas, L. H. e Paula, G. A. (2016). ssym: Fitting Semi-Parametric log-Symmetric Regression Models. R package version 1.5.7. https://CRAN.R-project.org/package=ssym
+
